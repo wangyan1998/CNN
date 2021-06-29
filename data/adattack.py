@@ -1,22 +1,46 @@
+import math
+import torch
 import numpy as np
+import csv
+from scipy.optimize import fsolve
 
-inf = [[-368461.739, 26534822.568, -517664.322, 21966984.2427, -0.000104647296],
-       [10002180.758, 12040222.131, 21796269.831, 23447022.1136, -0.000308443058],
-       [-7036480.928, 22592611.906, 11809485.040, 20154521.4618, -0.000038172460],
-       [8330122.410, 23062955.196, 10138101.718, 22129309.3677, -0.0002393560]]
-
-inf1 = [[-368461.739, 26534822.568, -517664.322],
-        [10002180.758, 12040222.131, 21796269.831],
-        [-7036480.928, 22592611.906, 11809485.040],
-        [8330122.41, 23062955.196, 10138101.718]]
-
-p = [21966984.2427, 23447022.1136, 20154521.4618, 22129309.3677]
-
-t = [-0.000104647296, -0.000308443058, -0.000038172460, -0.000239356]
+f = open('../dataset/mydataset.csv', 'r')
+reader = csv.reader(f)  # 创建一个与该文件相关的阅读器
+result = list(reader)
+inf = []
+inf1 = []
+p = []
+t = []
+attpos = [-2279827.6066, 5004703.5738, 3219775.4338]
 # 初始估计接收机位置
 pos0 = [0, 0, 0]
 
-pos1 = [-2279829.1069, 5004709.2387, 3219779.0559]
+
+# 从文件中获取数据
+def getdata(i):
+    global inf
+    k = i
+    j = i + 4
+    while k < j:
+        a = [float(result[k][2]), float(result[k][3]), float(result[k][4]), float(result[k][5]), float(result[k][6])]
+        inf.append(a)
+        k += 1
+    return inf
+
+
+# 将获取的数据存入到相应的数组中
+def processdata():
+    global inf1
+    global p
+    global t
+    for i in range(4):
+        r = []
+        r.append(inf[i][0])
+        r.append(inf[i][1])
+        r.append(inf[i][2])
+        inf1.append(r)
+        p.append(inf[i][3])
+        t.append(inf[i][4])
 
 
 # 获取两点之间的距离
@@ -74,7 +98,6 @@ def getmatH(info, pos, r):
     res = []
     k = len(info)
     i = 0
-    c = 3 * 10 ** 8
     while i < k:
         l = []
         l.append((pos[0] - info[i][0]) / r[i])
@@ -88,6 +111,7 @@ def getmatH(info, pos, r):
 def calresult():
     global pos0
     for j in range(10):
+        # print(pos0)
         p1 = getp()
         # print("估计位置到各卫星的伪距值为：\n", p1)
         detp = getdetp(p1)
@@ -97,7 +121,7 @@ def calresult():
         H = getmatH(inf1, pos0, r)
         # print("获得的观测矩阵H为:\n", H)
         H1 = np.array(H)
-        # print(H1)
+        # print("观测矩阵:\n", H1)
         H2 = np.transpose(H1)
         # print(H2)
         H3 = np.dot(H2, H1)
@@ -105,20 +129,8 @@ def calresult():
         H4 = np.linalg.pinv(H3)
         # print(H4)
         H5 = np.dot(H4, H2)
-        # print(H5)
-
-        H6 = np.dot(H1, H5)
-        In = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-        S = In - H6
-        R = np.dot(S, detp)
-        Rt = np.transpose(R)
-        Ts = np.dot(Rt, R)
-        # print("Ts:", Ts)
         detx = np.dot(H5, detp)
-        # print(detx)
         pos0 = pos0 + detx
-        # print(pos0)
-    # print(pos1 - pos0)
 
 
 def XYZ_to_LLA(X, Y, Z):
@@ -137,14 +149,52 @@ def XYZ_to_LLA(X, Y, Z):
     return np.array([np.degrees(latitude), np.degrees(longitude), altitude])
 
 
-def getgrad():
+def getgrad(x, y, z):
+    n1 = x - attpos[0]
+    n2 = y - attpos[1]
+    n3 = z - attpos[2]
+    gx = [0, 0, 0, 0]
+    gy = [0, 0, 0, 0]
+    gz = [0, 0, 0, 0]
+    if n1 > 0:
+        gx = [1, 1, -1, 1]
+    else:
+        gx = [-1, -1, 1, -1]
+    if n2 > 0:
+        gy = [1, -1, 1, 1]
+    else:
+        gy = [-1, 1, -1, -1]
+    if n3 > 0:
+        gz = [-1, 1, 1, -1]
+    else:
+        gz = [1, -1, -1, 1]
+    g = np.array(gx) + np.array(gy) + np.array(gz)
+    # t = torch.tensor(g)
+    # sign = t.sign()
+    return g
+
+
+def adattack():
+    global inf1
     global p
-    for i in range(1000):
-        p[0] = p[0] + i/10
+    global t
+    dis = 1000000
+    while dis > 3:
         calresult()
-        print(pos0)
+        r = pos0
+        print("攻击位置：", attpos)
+        print("解算位置：", r)
+        print("经纬度：", XYZ_to_LLA(r[0], r[1], r[2]))
+        dis = get_distance1(r, attpos)
+        print("距离差：", dis)
+        sign = getgrad(r[0], r[1], r[2])
+        print(sign)
+        i = 1
+        while i < 4:
+            p[i] = p[i] + 0.1 * sign[i]
+            i = i + 1
 
 
-# calresult()
-# print(XYZ_to_LLA(pos0[0], pos0[1], pos0[2]))
-getgrad()
+getdata(21)
+processdata()
+adattack()

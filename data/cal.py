@@ -10,4 +10,5 @@ mat_trp = np.transpose(mat)    # 矩阵转置
 print(mat_trp)
 offset = np.array([[16, 128, 128]])
 print(np.transpose(offset))
+print(np.eye(5))
 

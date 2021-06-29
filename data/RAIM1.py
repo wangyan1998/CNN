@@ -109,6 +109,14 @@ def calresult():
         # print(H4)
         H5 = np.dot(H4, H2)
         # print(H5)
+
+        H6 = np.dot(H1, H5)
+        In = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+        S = In - H6
+        R = np.dot(S, detp)
+        Rt = np.transpose(R)
+        Ts = np.dot(Rt, R)
+        print("Ts:", Ts)
         detx = np.dot(H5, detp)
         # print(detx)
         pos0 = pos0 + detx

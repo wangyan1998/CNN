@@ -1,22 +1,24 @@
 import numpy as np
+import math
 
-inf = [[-368461.739, 26534822.568, -517664.322, 21966984.2427, -0.000104647296],
-       [10002180.758, 12040222.131, 21796269.831, 23447022.1136, -0.000308443058],
-       [-7036480.928, 22592611.906, 11809485.040, 20154521.4618, -0.000038172460],
-       [8330122.410, 23062955.196, 10138101.718, 22129309.3677, -0.0002393560]]
+inf = [[17264158.265, 9012094.795, 18535344.120, 23483072.717, -0.000047243624],
+       [-4939748.322, 25907897.946, -1938959.799, 21576175.050, -0.000147955131],
+       [10411489.279, 15056961.599, 19201346.120, 21308372.478, 0.000388797552],
+       [-9251262.428, 11560251.160, 21828403.561, 21671952.866, -0.000049201545]]
 
-inf1 = [[-368461.739, 26534822.568, -517664.322],
-        [10002180.758, 12040222.131, 21796269.831],
-        [-7036480.928, 22592611.906, 11809485.040],
-        [8330122.41, 23062955.196, 10138101.718]]
+inf1 = [[17264158.265, 9012094.795, 18535344.120],
+        [-4939748.322, 25907897.946, -1938959.799],
+        [10411489.279, 15056961.599, 19201346.120],
+        [-9251262.428, 11560251.160, 21828403.561]]
 
-p = [21966984.2427, 23447022.1136, 20154521.4618, 22129309.3677]
+p = [23483072.717, 21576175.050, 21308372.478, 21671952.866]
 
-t = [-0.000104647296, -0.000308443058, -0.000038172460, -0.000239356]
+t = [-0.000047243624, -0.000147955131, 0.000388797552, -0.000049201545]
 # 初始估计接收机位置
 pos0 = [0, 0, 0]
 
-pos1 = [-2279829.1069, 5004709.2387, 3219779.0559]
+
+# pos1 = [-2279829.1069, 5004709.2387, 3219779.0559]
 
 
 # 获取两点之间的距离
@@ -42,6 +44,15 @@ def getp():
     i = 0
     while i < len(inf1):
         res.append(get_distance2(pos0, inf1[i], t[i]))
+        i = i + 1
+    return res
+
+
+def getdetp1(p):
+    res = []
+    i = 1
+    while i < 4:
+        res.append(p[i] - p[0])
         i = i + 1
     return res
 
@@ -85,9 +96,43 @@ def getmatH(info, pos, r):
     return res
 
 
+def getH(H):
+    res = []
+    i = 1
+    while i < 4:
+        re = []
+        re.append(H[i][0] - H[0][0])
+        re.append(H[i][1] - H[0][1])
+        re.append(H[i][2] - H[0][2])
+        res.append(re)
+        i = i + 1
+    return res
+
+
+def calTs(p1, H):
+    global pos0
+    detp1 = getdetp1(p1)
+    Ho = getH(H)
+    # print(list(Ho))
+    H1 = np.array(Ho)
+    # print("观测矩阵:\n", H1)
+    H2 = np.transpose(H1)
+    H3 = np.dot(H2, H1)
+    H4 = np.linalg.pinv(H3)
+    H5 = np.dot(H1, H4)
+    H6 = np.dot(H5, H2)
+    In = np.eye(len(p)-1)
+    S = In - H6
+    R = np.dot(S, detp1)
+    Rt = np.transpose(R)
+    Ts = np.dot(Rt, R)
+    print("Ts:", Ts)
+
+
 def calresult():
     global pos0
     for j in range(10):
+        print(pos0)
         p1 = getp()
         # print("估计位置到各卫星的伪距值为：\n", p1)
         detp = getdetp(p1)
@@ -97,7 +142,7 @@ def calresult():
         H = getmatH(inf1, pos0, r)
         # print("获得的观测矩阵H为:\n", H)
         H1 = np.array(H)
-        # print(H1)
+        print("观测矩阵:\n", H1)
         H2 = np.transpose(H1)
         # print(H2)
         H3 = np.dot(H2, H1)
@@ -106,19 +151,12 @@ def calresult():
         # print(H4)
         H5 = np.dot(H4, H2)
         # print(H5)
-
-        H6 = np.dot(H1, H5)
-        In = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-        S = In - H6
-        R = np.dot(S, detp)
-        Rt = np.transpose(R)
-        Ts = np.dot(Rt, R)
-        # print("Ts:", Ts)
+        calTs(p1, H)
         detx = np.dot(H5, detp)
         # print(detx)
         pos0 = pos0 + detx
         # print(pos0)
-    # print(pos1 - pos0)
+        # print("位置距离差:\n", pos1 - pos0)
 
 
 def XYZ_to_LLA(X, Y, Z):
@@ -137,14 +175,6 @@ def XYZ_to_LLA(X, Y, Z):
     return np.array([np.degrees(latitude), np.degrees(longitude), altitude])
 
 
-def getgrad():
-    global p
-    for i in range(1000):
-        p[0] = p[0] + i/10
-        calresult()
-        print(pos0)
-
-
-# calresult()
-# print(XYZ_to_LLA(pos0[0], pos0[1], pos0[2]))
-getgrad()
+calresult()
+solved2 = XYZ_to_LLA(pos0[0], pos0[1], pos0[2])
+print(solved2)
